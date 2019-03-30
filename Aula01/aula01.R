@@ -6,7 +6,7 @@
 ## Pacotes utilizados
 
 # Caso não tenha algum instalado, utilize a função 
-# instal.packages('quantmod') para instalar um ou mais pacotes.
+# install.packages('quantmod') para instalar um ou mais pacotes.
 
 library(quantmod)
 library(xts)
