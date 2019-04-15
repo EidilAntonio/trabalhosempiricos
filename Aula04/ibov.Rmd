@@ -1,0 +1,12 @@
+---
+title: "Investigando a relação entre Ibovespa e a variação da FBCF"
+author: Vítor Wilher, MSc in Economics
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introdução 
+

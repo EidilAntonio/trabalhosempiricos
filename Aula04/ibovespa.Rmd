@@ -1,0 +1,197 @@
+---
+title: "Ibovespa vs. Variação da FBCF: há relação?"
+author: Vítor Wilher, MSc in Economics
+date: "`r format(Sys.time(), '%d de %B, %Y')`"
+abstract: "Verificamos a relação entre o Ibovespa e a variação interanual da Formação Bruta de Capital Fixo (FBCF) por meio da estimação de um Vetor de Correção de Erros (VEC). Fazemos a análise das funções impulso-resposta e da decomposição de variância a partir do modelo estimado. Ademais, também aplicamos o procedimento de Toda-Yamamoto de modo a investigar causalidade. Os resultados encontrados sugerem que um choque no Ibovespa tem um efeito positivo na variação interanual da FBCF, aumentando a mesma em mais de 3 pontos percentuais após três trimestres. A decomposição de variância, por seu turno, revela que cerca de 30% da variância da variação interanual da FBCF é explicada pelo Ibovespa, passados 12 trimestres. Por fim, o teste de precedência temporal sugere que o Ibovespa ajuda a explicar a variação da FBCF, enquanto não encontramos evidências no caso contrário."
+output: 
+  pdf_document:
+    toc: true
+    number_sections: true
+    includes:
+      in_header: header.tex
+geometry: margin=1in
+fontfamily: mathpazo
+fontsize: 11pt
+bibliography: 'references.bib'
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  ifelse(options$size != "normalsize", paste0("\\", options$size,"\n\n", x, "\n\n \\normalsize"), x)
+})
+
+```
+
+
+\newpage
+# Índice BOVESPA
+
+```{r, echo=T, eval=T, results='hide', fig.cap='', fig.width=8, fig.height=4, fig.align='center', out.width=".7\\linewidth", warning=FALSE, message=FALSE, size='footnotesize'}
+
+# IBOVESPA
+library(quantmod)
+library(xts)
+env <- new.env()
+getSymbols("^BVSP",src="yahoo", 
+           env=env,
+           from=as.Date('2001-01-01'))
+ibovespa = env$BVSP[,4]
+ibovespa = ibovespa[complete.cases(ibovespa)] 
+ibovespa = apply.quarterly(ibovespa, FUN=mean)
+ibovespa = ts(ibovespa, start=c(2001,01), freq=4)
+```
+
+
+# FBCF 
+
+```{r, echo=T, eval=T, results='hide', fig.cap='', fig.width=8, fig.height=4, fig.align='center', out.width=".7\\linewidth", warning=FALSE, message=FALSE, size='footnotesize'}
+
+# FBCF
+library(sidrar)
+fbcf = get_sidra(api="/t/1620/n1/all/v/all/p/all/c11255/93406/d/v583%202")
+fbcf = fbcf$Valor
+fbcf = ts(fbcf, start=c(1996,01), freq=4)
+dfbcf = (fbcf/lag(fbcf,-4)-1)*100
+```
+
+# Visualização dos dados
+
+```{r, echo=T, eval=T, results='asis', fig.width=8, fig.height=4, fig.align='center', out.width=".7\\linewidth", warning=FALSE, message=FALSE, size='footnotesize'}
+
+# Visualização dos dados
+data = ts.intersect(ibovespa, dfbcf)
+library(forecast)
+library(ggplot2)
+library(scales)
+df = data.frame(dates=as.Date(time(data)), ibovespa=data[,1]/1000,
+                fbcf=data[,2])
+df = transform(df, dates = as.yearqtr(dates))
+ggplot(df, aes(x=dates))+
+  geom_line(aes(y=ibovespa, colour='Ibovespa'), size=.8)+
+  geom_line(aes(y=fbcf*2.5, colour='FBCF'), size=.8)+
+  scale_y_continuous(sec.axis = sec_axis(~./2.5, name='FBCF (%)'))+
+  scale_colour_manual('',
+                      values=c('darkblue', 'red'))+
+  theme(legend.position = c(.3,.2))+
+  xlab('')+ylab('Ibovespa (mil pontos)')+
+  scale_x_yearqtr(format = "%YQ%q", n=14)+  theme(axis.text.x=element_text(angle=45, hjust=1))+
+  labs(title='Ibovespa vs. Crescimento interanual da FBCF',
+       caption='Fonte: analisemacro.com.br')
+  
+
+```
+
+```{r, echo=T, eval=T, results='asis', fig.width=8, fig.height=4, fig.align='center', out.width=".7\\linewidth", warning=FALSE, message=FALSE, size='footnotesize'}
+
+# Lag
+library(astsa)
+lag2.plot(data[,"dfbcf"], data[,"ibovespa"], max.lag=3)
+
+```
+
+# Modelo
+
+```{r, echo=T, eval=T, results='markup', fig.width=8, fig.height=4, fig.align='center', out.width=".7\\linewidth", warning=FALSE, message=FALSE, size='footnotesize'}
+
+library(vars)
+### Selecionar Defasagem
+def <- VARselect(data,lag.max=12,type="both")
+def$selection 
+
+### Teste de Cointegração
+
+jo.eigen <- ca.jo(data, type='eigen', K=2, ecdet='const', 
+                  spec='transitory')
+summary(jo.eigen)
+
+
+```
+
+```{r, echo=T, eval=T, results='markup', fig.width=8, fig.height=4, fig.align='center', out.width=".7\\linewidth", warning=FALSE, message=FALSE, size='footnotesize'}
+
+### VEC
+vec <- cajorls(jo.eigen, r=1)
+vec$beta # Vetor de Cointegração Normalizado
+vec$rlm # VECM com r=1
+```
+
+```{r, echo=T, eval=T, results='markup', fig.width=8, fig.height=4, fig.align='center', out.width=".7\\linewidth", warning=FALSE, message=FALSE, size='footnotesize'}
+
+### VEC para VAR
+vec.level <- vec2var(jo.eigen, r=1)
+
+
+```
+
+## Função Impulso-Resposta
+
+```{r, echo=T, eval=T, results='asis', fig.width=8, fig.height=4, fig.align='center', out.width=".7\\linewidth", warning=FALSE, message=FALSE, size='footnotesize'}
+
+# IRF: Impulso no Ibovespa e resposta na dfbcf
+irf = irf(vec.level, impulse='ibovespa', response='dfbcf', 
+          n.ahead = 12, boot=T, ortho=T, cumulative=F)
+lags = 1:13
+df.irf <- data.frame(irf=irf$irf, lower=irf$Lower, upper=irf$Upper,
+                     lags=lags)
+
+colnames(df.irf) <- c('irf', 'lower', 'upper', 'lags')
+
+number_ticks <- function(n) {function(limits) pretty(limits, n)}
+
+ggplot(data = df.irf,aes(x=lags,y=irf)) +
+  geom_line(aes(y = upper), colour = 'lightblue2') +
+  geom_line(aes(y = lower), colour = 'lightblue')+
+  geom_line(aes(y = irf), size=.8)+
+  geom_ribbon(aes(x=lags, ymax=upper, 
+                  ymin=lower), 
+              fill="blue", alpha=.1) +
+  xlab("") + ylab("Variação da FBCF") + 
+  ggtitle("Resposta ao Impulso em Ibovespa") +
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),                    
+        axis.ticks.x=element_blank(),
+        plot.margin = unit(c(2,10,2,10), "mm"))+
+  geom_line(colour = 'black')+
+  scale_x_continuous(breaks=number_ticks(13))+
+  theme_bw()
+
+```
+
+
+
+## Decomposição de Variância
+
+```{r, echo=T, eval=T, results='markup', fig.width=8, fig.height=4, fig.align='center', out.width=".7\\linewidth", warning=FALSE, message=FALSE, size='footnotesize'}
+
+### Decomposição de Variância
+fevd(vec.level, n.ahead=12)
+
+
+```
+
+# Teste de Causalidade
+
+```{r, echo=T, eval=T, results='markup', fig.width=8, fig.height=4, fig.align='center', out.width=".7\\linewidth", warning=FALSE, message=FALSE, size='footnotesize'}
+
+### VAR(2)
+var2 <- VAR(data, p=2, type='both')
+serial.test(var2)
+### Teste de Wald
+var3 <- VAR(data, p=3, type='both')
+### Wald Test 01: DFBCF não granger causa Ibovespa
+library(aod)
+wald.test(b=coef(var3$varresult[[1]]), 
+          Sigma=vcov(var3$varresult[[1]]), 
+          Terms=c(2,4))
+
+### Wald Test 02: Ibovespa não granger causa DFBCF
+wald.test(b=coef(var3$varresult[[2]]), 
+          Sigma=vcov(var3$varresult[[2]]), 
+          Terms= c(1,3))
+
+
+```
